@@ -24,10 +24,14 @@
 package me.yarhoslav.actors;
 
 import me.yarhoslav.ymactors.core.DefaultActorHandler;
+import me.yarhoslav.ymactors.core.mensajes.PoisonPill;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
+ * DecrypterActor - Decrypt a 22 chart length. Encrypted Server information from
+ * Slither.io
  *
  * @author yarhoslavme
  */
@@ -35,8 +39,32 @@ public class DecrypterActor extends DefaultActorHandler {
 
     private static final Logger LOG = LogManager.getLogger(DecrypterActor.class);
 
+    //Messages able to react
     public enum MSGS {
         DECRYPT
+    }
+
+    //Message with response
+    public final class Response {
+
+        private final String response;
+        private final int port;
+
+        public Response(String pIP, int pPort) {
+            response = pIP;
+            port = pPort;
+        }
+
+        /**
+         * @return the response
+         */
+        public String getResponse() {
+            return response;
+        }
+        
+        public int getPort() {
+            return port;
+        }
     }
 
     public enum STATUS {
@@ -47,26 +75,31 @@ public class DecrypterActor extends DefaultActorHandler {
 
     //Working variables
     private final String encrypted;
-    private String decrypted;
     private STATUS status;
 
-    public DecrypterActor(String pEncrypted) {
-        //TODO: Check illegal argument - string different to 22 chars - throw Illegalargument exception.
+    /**
+     *
+     * @param pEncrypted
+     */
+    public DecrypterActor(String pEncrypted) throws IllegalArgumentException {
         LOG.traceEntry("constructor");
+
+        //Verify Argument exact 22 chars length
+        if (pEncrypted.length() != 22) {
+            throw LOG.throwing(Level.DEBUG, new IllegalArgumentException("Wrong length for encrypted string"));
+        }
+
         encrypted = pEncrypted;
         status = STATUS.INITIATED;
         LOG.traceExit("constructor");
     }
 
-    public void decrypting() {
-        LOG.traceEntry("decrypting");
-        LOG.debug("Recibido: {}", encrypted);
-        status = STATUS.DECRYPTING;
-
-        //TODO: Decrypter algorithm
-        StringBuilder txtIP = new StringBuilder();
+    private char[] calculateBytes() {
         char[] chars = encrypted.toCharArray();
         char[] bytes = new char[chars.length];
+
+        LOG.traceEntry("convertString");
+
         for (int i = 0; i < chars.length; i++) {
             int nibble = (chars[i] - 'a' - i * 7) % 26;
             if (nibble < 0) {
@@ -75,46 +108,65 @@ public class DecrypterActor extends DefaultActorHandler {
             bytes[i] = (char) nibble;
         }
 
-        //For test purpose
-        StringBuilder txtBytes = new StringBuilder();
-        for (int i = 0; i < bytes.length; i++) {
-            txtBytes.append(Integer.toString(bytes[i]));
-            txtBytes.append(",");
-        }
-        LOG.debug(txtBytes.toString());
+        return LOG.traceExit(bytes);
+    }
 
+    private char[] calculateIP(char[] pBytes) {
         char[] ip = new char[11];
+        
+        LOG.traceEntry("calculateIP");
+
         int j = 0;
-        for (int i = 0; i < bytes.length; i = i + 2) {
-            ip[j] = (char) (bytes[i] * 16 + bytes[i + 1]);
+        for (int i = 0; i < pBytes.length; i = i + 2) {
+            ip[j] = (char) (pBytes[i] * 16 + pBytes[i + 1]);
             j++;
         }
 
-        StringBuilder txtANT = new StringBuilder();
-        for (int i = 0; i < ip.length; i++) {
-            txtANT.append(Integer.toString(ip[i]));
-            txtANT.append(",");
-        }
-        LOG.debug(txtANT.toString());
-
-        for (j = 0; j < 4; j++) {
-            txtIP.append(Integer.toString(ip[j]));
+        return LOG.traceExit(ip);
+    }
+    
+    private String convertIP(char[] pBytes) {
+        StringBuilder convertedIP = new StringBuilder();
+        
+        LOG.traceEntry("convertIP");
+        
+        for (int j = 0; j < 4; j++) {
+            convertedIP.append(Integer.toString(pBytes[j]));
             if (j < 3) {
-                txtIP.append(".");
+                convertedIP.append(".");
             }
-        }
+        }        
+        
+        return LOG.traceExit(convertedIP.toString());
+    }
+    
+    private int calculatePort(char[] pBytes) {
+        int port;
+        
+        LOG.traceEntry("calculatePort");
 
-        //Calcule Port
-        txtIP.append(":");
-        int port = ip[4] * 256 * 256 + ip[5] * 256 + ip[6];
-        txtIP.append(Integer.toString(port));
-        decrypted = txtIP.toString();
+        port = pBytes[4] * 256 * 256 + pBytes[5] * 256 + pBytes[6];
+        
+        return LOG.traceExit(port);
+    }
 
-        //Sending back the result decrypted
-        LOG.debug("Convertido: {}", decrypted);
-        getMyself().getSender().tell(decrypted, getMyself());
+    private void decrypt() {
+        LOG.traceEntry("decrypt");
+
+        LOG.debug("Recibido: {}", encrypted);
+        status = STATUS.DECRYPTING;
+        char[] bytes = calculateBytes();
+        char[] ip = calculateIP(bytes);
+        String convertedIP = convertIP(ip);
+        int port = calculatePort(ip);
+        //Sending back the decrypted string 
+        LOG.debug("Convertido: {}:{}", convertedIP, port);
+        getMyself().getSender().tell(new Response(convertedIP, port), getMyself());
         status = STATUS.CLOSED;
-        LOG.traceExit("decrypting");
+
+        //TODO: Create EmptyActor en YMActors
+        getMyself().tell(PoisonPill.getInstance(), getMyself());
+        LOG.traceExit("decrypt");
     }
 
     //TODO: handle excpetions in YMACtor and throw Exception on @Process.  Maybe rename it to onReceive.
@@ -122,10 +174,8 @@ public class DecrypterActor extends DefaultActorHandler {
     public void process(Object msg) {
         LOG.traceEntry("process");
         if (msg instanceof MSGS) {
-            if ((MSGS) msg == MSGS.DECRYPT) {
-                if (status == STATUS.INITIATED) {
-                    decrypting();
-                }
+            if (((MSGS) msg == MSGS.DECRYPT) && (status == STATUS.INITIATED)) {
+                decrypt();
             }
         } else {
             //TODO: unhandled messages.  Possible update in YMActors
