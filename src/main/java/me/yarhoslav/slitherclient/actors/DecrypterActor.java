@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package me.yarhoslav.actors;
+package me.yarhoslav.slitherclient.actors;
 
 import me.yarhoslav.ymactors.core.DefaultActorHandler;
 import me.yarhoslav.ymactors.core.mensajes.PoisonPill;
@@ -162,10 +162,11 @@ public class DecrypterActor extends DefaultActorHandler {
         //Sending back the decrypted string 
         LOG.debug("Convertido: {}:{}", convertedIP, port);
         getMyself().getSender().tell(new Response(convertedIP, port), getMyself());
-        status = STATUS.CLOSED;
 
         //TODO: Create EmptyActor en YMActors
+        status = STATUS.CLOSED;
         getMyself().tell(PoisonPill.getInstance(), getMyself());
+
         LOG.traceExit("decrypt");
     }
 

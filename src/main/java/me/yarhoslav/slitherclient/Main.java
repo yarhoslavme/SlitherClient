@@ -3,7 +3,7 @@ package me.yarhoslav.slitherclient;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import me.yarhoslav.actors.DecrypterActor;
+import me.yarhoslav.slitherclient.actors.DecrypterActor;
 import me.yarhoslav.ymactors.core.ActorsContainer;
 import me.yarhoslav.ymactors.core.interfaces.IActorRef;
 import org.apache.logging.log4j.LogManager;
